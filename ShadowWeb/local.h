@@ -7,9 +7,9 @@
 #define BUF_SIZE 1500
 
 struct listen_ctx {
-	ev_io io;
+    ev_io io;
 	int fd;
-	struct sockaddr sock;
+    struct sockaddr sock;
 };
 
 struct server {

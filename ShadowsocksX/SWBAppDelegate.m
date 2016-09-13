@@ -356,10 +356,15 @@ void onPACChange(
 
 - (void)runProxy {
     [ShadowsocksRunner reloadConfig];
-    for (; ;) {
-        if ([ShadowsocksRunner runProxy]) {
+    // 看上去是一个for的死循环，但是，里面调用了local_main()函数，local_main()里面会调用libev，因此，可能不会回调。
+    for (; ;)
+    {
+        if ([ShadowsocksRunner runProxy])
+        {
             sleep(1);
-        } else {
+        }
+        else
+        {
             sleep(2);
         }
     }

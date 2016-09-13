@@ -504,9 +504,11 @@ void close_and_free_server(EV_P_ struct server *server) {
 }
 static void accept_cb (EV_P_ ev_io *w, int revents)
 {
+    // 返回的w为监听者 revents为监听的事件类型。
 	struct listen_ctx *listener = (struct listen_ctx *)w;
 	int serverfd;
 	while (1) {
+        // 获取监听到的fd，将其accept。
 		serverfd = accept(listener->fd, NULL, NULL);
 		if (serverfd == -1) {
             if (errno != EAGAIN && errno != EWOULDBLOCK) {
@@ -516,22 +518,29 @@ static void accept_cb (EV_P_ ev_io *w, int revents)
 		}
 		setnonblocking(serverfd);
         int opt = 1;
+        // 特定的设置某个TCP选项，禁用Nagle算法，对TCP来说只要有packet就发
         setsockopt(serverfd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
+        // 对端不再接受数据，如果继续两次发送数据会抛出异常导致结束进程，这处理是忽略抛出的异常不结束进程。
         setsockopt(serverfd, SOL_SOCKET, SO_NOSIGPIPE, &opt, sizeof(opt));
+        // 通过socketfd构建一个结构体，该结构体记录了很多信息，同时也为这个accept形成的sockfd设置了回调函数server_recv_cb 和 server_send_cb
 		struct server *server = new_server(serverfd);
 		struct addrinfo hints, *res;
 		int sockfd;
 		memset(&hints, 0, sizeof hints);
 		hints.ai_family = AF_UNSPEC;
 		hints.ai_socktype = SOCK_STREAM;
+        // 拿到远端ss服务器的地址，将其转为可用的socket结构体
 		int r = getaddrinfo(_server, _remote_port, &hints, &res);
         if (r) {
             fprintf(stderr, "getaddrinfo: %s", gai_strerror(r));
 			free_server(server);
 			continue;
         }
+        // 获取远端ss服务器的socket的描述符
 		sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+        // 特定的设置某个TCP选项，禁用Nagle算法，对TCP来说只要有packet就发
         setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
+        // 对端不再接受数据，如果继续两次发送数据会抛出异常导致结束进程，这处理是忽略抛出的异常不结束进程。
         setsockopt(sockfd, SOL_SOCKET, SO_NOSIGPIPE, &opt, sizeof(opt));
 		if (sockfd < 0) {
 			perror("socket");
@@ -540,9 +549,13 @@ static void accept_cb (EV_P_ ev_io *w, int revents)
 			continue;
 		}
 		setnonblocking(sockfd);
+        // 通过socketfd构建一个结构体，该结构体记录了很多信息，同时也为这个accept形成的sockfd设置了回调函数remote_recv_cb 和 remote_send_cb
 		struct remote *remote = new_remote(sockfd);
+        
+        // server 指的是设备上的服务器 remote指的是远端的服务器
 		server->remote = remote;
 		remote->server = server;
+        
 		connect(sockfd, res->ai_addr, res->ai_addrlen);
 		freeaddrinfo(res);
 		// listen to remote connected event
@@ -595,6 +608,7 @@ int local_main ()
     struct listen_ctx listen_ctx;
     listen_ctx.fd = listenfd;
     struct ev_loop *loop = EV_DEFAULT;
+    // 通过libev来监听listenfd, 监听的回调为accept_cb函数
     ev_io_init (&listen_ctx.io, accept_cb, listenfd, EV_READ);
     ev_io_start (loop, &listen_ctx.io);
     ev_run (loop, 0);
