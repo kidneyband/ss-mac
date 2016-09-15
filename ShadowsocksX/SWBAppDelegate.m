@@ -52,7 +52,9 @@ static SWBAppDelegate *appDelegate;
     });
 
     originalPACData = [[NSData dataWithContentsOfURL:[[NSBundle mainBundle] URLForResource:@"proxy" withExtension:@"pac.gz"]] gunzippedData];
+    
     GCDWebServer *webServer = [[GCDWebServer alloc] init];
+    // 对于请求proxy.pac的请求进行截断，并在这里返回pac文件
     [webServer addHandlerForMethod:@"GET" path:@"/proxy.pac" requestClass:[GCDWebServerRequest class] processBlock:^GCDWebServerResponse *(GCDWebServerRequest *request) {
         NSString * host = [request headers][@"Host"];
         host = [host stringByReplacingOccurrencesOfString:@":8090" withString:@""];
@@ -71,12 +73,13 @@ static SWBAppDelegate *appDelegate;
     }];
 
     
-
+    // 启动pac文件返回服务器。
     [webServer startWithPort:8090 bonjourName:@"webserver"];
 
     manager = [AFHTTPRequestOperationManager manager];
     manager.responseSerializer = [AFHTTPResponseSerializer serializer];
 
+    // UI section
     self.item = [[NSStatusBar systemStatusBar] statusItemWithLength:20];
     NSImage *image = [NSImage imageNamed:@"menu_icon"];
     [image setTemplate:YES];
@@ -123,7 +126,14 @@ static SWBAppDelegate *appDelegate;
     [menu addItem:[NSMenuItem separatorItem]];
     [menu addItemWithTitle:_L(Quit) action:@selector(exit) keyEquivalent:@""];
     self.item.menu = menu;
+    // 安装一个命令行工具，用来切换流量过滤需求
+    // shadowsocks_sysconf的功能是遍历网卡设备，设置Mac系统的全局代理设置。比如Wi-Fi，
+    // auto模式设置后效果如同System Preferences->Network->WiFi->Advanced->Proxies->Automatic Proxy Configuration->URL=http://127.0.0.1:8090/proxy.pac
+    // global模式设置后效果如同System Preferences->Network->WiFi->Advanced->Proxies->SOCKS Proxy->127.0.0.1:1080
+    // 之所以要用一个命令去做这件事，是因为每次调用修改系统配置的API都要输入密码，而这个sysconf直接安装到了系统，具体修改网络配置的权限，因而可以完成。
     [self installHelper];
+    
+    // 开启系统的pac代理模式
     [self initializeProxy];
 
 

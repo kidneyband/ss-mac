@@ -73,12 +73,14 @@ int create_and_bind(const char *port) {
     return listen_sock;
 }
 
+// 本地有数据进来
 static void server_recv_cb (EV_P_ ev_io *w, int revents) {
 	struct server_ctx *server_recv_ctx = (struct server_ctx *)w;
 	struct server *server = server_recv_ctx->server;
 	struct remote *remote = server->remote;
 //    NSLog(@"server_recv_cb %d", server?server->stage:-1);
 
+    // 虽然有数据进来，但是没有remote，只能丢弃
     if (remote == NULL) {
         close_and_free_server(EV_A_ server);
         return;
@@ -86,11 +88,13 @@ static void server_recv_cb (EV_P_ ev_io *w, int revents) {
 
     char *buf = remote->buf;
     size_t *buf_len = &remote->buf_len;
+    // 看是不是sock 5
     if (server->stage != 5) {
         buf = server->buf;
         buf_len = &server->buf_len;
     }
 
+    // 去接收数据 接收到remote的buf中去
     ssize_t r = recv(server->fd, buf, BUF_SIZE, 0);
 
     if (r == 0) {
@@ -254,6 +258,7 @@ static void server_recv_cb (EV_P_ ev_io *w, int revents) {
 	}
 }
 
+// 有数据要发送给本地
 static void server_send_cb (EV_P_ ev_io *w, int revents) {
 	struct server_ctx *server_send_ctx = (struct server_ctx *)w;
 	struct server *server = server_send_ctx->server;
@@ -502,9 +507,12 @@ void close_and_free_server(EV_P_ struct server *server) {
 		free_server(server);
 	}
 }
+
+// 这个函数中，在本机的某个端口监听连接，有连接过来的话就accept, 然后对accept形成的socketfd的写入和写出用libev设置回调函数
+// 然后去连接ss服务器，连接成功之后同样用libev监听管道的写入写出数据。
 static void accept_cb (EV_P_ ev_io *w, int revents)
 {
-    // 返回的w为监听者 revents为监听的事件类型。
+    // 返回的w为监听者 revents为监听的事件类型。表明本地有数据过来，需要accept连接
 	struct listen_ctx *listener = (struct listen_ctx *)w;
 	int serverfd;
 	while (1) {
@@ -608,7 +616,7 @@ int local_main ()
     struct listen_ctx listen_ctx;
     listen_ctx.fd = listenfd;
     struct ev_loop *loop = EV_DEFAULT;
-    // 通过libev来监听listenfd, 监听的回调为accept_cb函数
+    // 通过libev来监听listenfd的写入动作, 监听的回调为accept_cb函数
     ev_io_init (&listen_ctx.io, accept_cb, listenfd, EV_READ);
     ev_io_start (loop, &listen_ctx.io);
     ev_run (loop, 0);
