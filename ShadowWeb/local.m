@@ -80,7 +80,7 @@ static void server_recv_cb (EV_P_ ev_io *w, int revents) {
 	struct remote *remote = server->remote;
 //    NSLog(@"server_recv_cb %d", server?server->stage:-1);
 
-    // 虽然有数据进来，但是没有remote，只能丢弃
+    // 虽然有数据进来，但是没有remote，无法转发
     if (remote == NULL) {
         close_and_free_server(EV_A_ server);
         return;
@@ -148,6 +148,7 @@ static void server_recv_cb (EV_P_ ev_io *w, int revents) {
             return;
         }
     } else if (server->stage == 0) {
+        //每次发送开始协商使用socket。
         struct method_select_response response;
         response.ver = SOCKS_VERSION;
         response.method = 0;
@@ -228,6 +229,7 @@ static void server_recv_cb (EV_P_ ev_io *w, int revents) {
             return;
         }
 
+        // 将要发送的数据发送出去之后，告诉客户端用sock5发送。协商完成，后续数据用sock 5协议发。
         // Fake reply
         struct socks5_response response;
         response.ver = SOCKS_VERSION;
@@ -322,6 +324,7 @@ static void remote_recv_cb (EV_P_ ev_io *w, int revents) {
         server->buf_len = 0;
         close_and_free_remote(EV_A_ remote);
         if (server != NULL) {
+            // 开始监听本地server的io
             ev_io_start(EV_A_ &server->send_ctx->io);
         }
         return;
@@ -376,6 +379,7 @@ static void remote_send_cb (EV_P_ ev_io *w, int revents) {
 		socklen_t len;
 		struct sockaddr_storage addr;
 		len = sizeof addr;
+        // 去拿socket对端的详情，以证明是否连上
 		int r = getpeername(remote->fd, (struct sockaddr*)&addr, &len);
 		if (r == 0) {
 			remote_send_ctx->connected = 1;
@@ -567,6 +571,7 @@ static void accept_cb (EV_P_ ev_io *w, int revents)
 		connect(sockfd, res->ai_addr, res->ai_addrlen);
 		freeaddrinfo(res);
 		// listen to remote connected event
+        // 之前虽然都设置了回调方法，但是事实上都没有监听，现在开始监听remote端的读写动作。
 		ev_io_start(EV_A_ &remote->send_ctx->io);
 		break;
 	}
